@@ -6,8 +6,10 @@ using System.Runtime.InteropServices;
 // associated with an assembly.
 #if UNITY4
 [assembly: AssemblyTitle("Universal C# Compiler Plugin for Unity 4")]
-#else
+#elif UNITY5
 [assembly: AssemblyTitle("Universal C# Compiler Plugin for Unity 5")]
+#elif UNITY2017
+[assembly: AssemblyTitle("Universal C# Compiler Plugin for Unity 2017")]
 #endif
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]

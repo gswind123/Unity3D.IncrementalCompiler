@@ -50,38 +50,12 @@ internal class CustomCSharpCompiler : MonoCSharpCompiler
 	// of GetCompilerPath(...) which is non-virtual unfortunately.
 	protected override Program StartCompiler()
 	{
-		var arguments = new List<string>
-		{
-			"-debug",
-			"-target:library",
-			"-nowarn:0169",
-			"-out:" + PrepareFileName(_island._output),
-			"-unsafe"
-		};
-		foreach (var reference in _island._references)
-		{
-			arguments.Add("-r:" + PrepareFileName(reference));
-		}
-
-		foreach (var define in _island._defines.Distinct())
-		{
-			arguments.Add("-define:" + define);
-		}
-
-		foreach (var file in _island._files)
-		{
-			arguments.Add(PrepareFileName(file));
-		}
-
-		var additionalReferences = GetAdditionalReferences();
-		foreach (string path in additionalReferences)
-		{
-			var text = Path.Combine(GetProfileDirectoryViaReflection(), path);
-			if (File.Exists(text))
-			{
-				arguments.Add("-r:" + PrepareFileName(text));
-			}
-		}
+        List<string> arguments =
+#if UNITY2017
+            GetArgumentsUnity2017();
+#else
+            GetArgumentsUnity5();
+#endif
 
 		var universalCompilerPath = GetUniversalCompilerPath();
 		if (universalCompilerPath != null)
@@ -105,7 +79,16 @@ internal class CustomCSharpCompiler : MonoCSharpCompiler
 					arguments.Add("@" + rspFileName);
 			}
 
-			return StartCompiler(_island._target, universalCompilerPath, arguments);
+            // Log current compile target
+            var outTarget = string.Empty;
+            foreach (var arg in arguments) {
+                if (arg.StartsWith("-out:")) {
+                    outTarget = arg.Substring("-out:".Length);
+                }
+            }
+            Debug.Log("[CustomCompiler] start to compile target : " + outTarget);
+
+            return StartCompiler(_island._target, universalCompilerPath, arguments);
 		}
 		else
 		{
@@ -163,4 +146,77 @@ internal class CustomCSharpCompiler : MonoCSharpCompiler
 		string monoInstallation2 = MonoInstallationFinder.GetMonoInstallation(monoInstallation);
 		return Path.Combine(monoInstallation2, Path.Combine("lib", Path.Combine("mono", profile)));
 	}
+
+    private List<string> GetArgumentsUnity5() {
+        var arguments = new List<string>
+        {
+          "-debug",
+          "-target:library",
+          "-nowarn:0169",
+          "-out:" + PrepareFileName(_island._output),
+          "-unsafe"
+        };
+        foreach (var reference in _island._references) {
+            arguments.Add("-r:" + PrepareFileName(reference));
+        }
+
+        foreach (var define in _island._defines.Distinct()) {
+            arguments.Add("-define:" + define);
+        }
+
+        foreach (var file in _island._files) {
+            arguments.Add(PrepareFileName(file));
+        }
+
+        var additionalReferences = GetAdditionalReferences();
+        foreach (string path in additionalReferences) {
+            var text = Path.Combine(GetProfileDirectoryViaReflection(), path);
+            if (File.Exists(text)) {
+                arguments.Add("-r:" + PrepareFileName(text));
+            }
+        }
+
+        return arguments;
+    }
+
+    private List<string> GetArgumentsUnity2017() {
+        var arguments = new List<string>
+        {
+          "-debug",
+          "-target:library",
+          "-nowarn:0169",
+          "-langversion:" + ((EditorApplication.scriptingRuntimeVersion == ScriptingRuntimeVersion.Latest) ? "6" : "4"),
+          "-out:" + PrepareFileName(_island._output),
+          "-unsafe"
+        };
+        if (!_island._development_player && !_island._editor)
+            arguments.Add("-optimize");
+
+        foreach (string dll in _island._references)
+            arguments.Add("-r:" + PrepareFileName(dll));
+        foreach (string define in _island._defines.Distinct())
+            arguments.Add("-define:" + define);
+        foreach (string source in _island._files)
+            arguments.Add(PrepareFileName(source));
+
+        // For .NET 2.0 profile, the new mcs.exe references class libraries out of 2.0-api folder (even though we run against 2.0 at runtime)
+        string profileForReferences = _island._api_compatibility_level == ApiCompatibilityLevel.NET_2_0 ? "2.0-api" : GetMonoProfileLibDirectory();
+        var referencesDirectory = MonoInstallationFinder.GetProfileDirectory(profileForReferences, MonoInstallationFinder.MonoBleedingEdgeInstallation);
+
+        // If additional references are not used in C# files, they won't be added to final package
+        foreach (string reference in GetAdditionalReferences()) {
+            string path = Path.Combine(referencesDirectory, reference);
+            if (File.Exists(path))
+                arguments.Add("-r:" + PrepareFileName(path));
+        }
+
+        if (!AddCustomResponseFileIfPresent(arguments, ReponseFilename)) {
+            if (_island._api_compatibility_level == ApiCompatibilityLevel.NET_2_0_Subset && AddCustomResponseFileIfPresent(arguments, "smcs.rsp"))
+                Debug.LogWarning(string.Format("Using obsolete custom response file 'smcs.rsp'. Please use '{0}' instead.", ReponseFilename));
+            else if (_island._api_compatibility_level == ApiCompatibilityLevel.NET_2_0 && AddCustomResponseFileIfPresent(arguments, "gmcs.rsp"))
+                Debug.LogWarning(string.Format("Using obsolete custom response file 'gmcs.rsp'. Please use '{0}' instead.", ReponseFilename));
+        }
+
+        return arguments;
+    }
 }

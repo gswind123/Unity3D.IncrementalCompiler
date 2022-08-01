@@ -17,6 +17,12 @@ public class CSharpProjectProcessor : AssetPostprocessor
 		return false;
 	}
 
+#if UNITY2017
+    public static void MarkAllScriptsDirty() {
+        UnityEditor.Scripting.ScriptCompilation.EditorCompilationInterface.DirtyAllScripts();
+    }
+#endif
+
 	private static void UpdateProjectFile(string file)
 	{
 		// strip out `LangVersion` elements
